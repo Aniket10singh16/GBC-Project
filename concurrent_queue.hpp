@@ -1,7 +1,3 @@
-//
-// Created by EXTREME_RED on 21-03-2022.
-//
-
 #ifndef FINAL_YEAR_PROJECT_CONCURRENT_QUEUE_HPP
 #define FINAL_YEAR_PROJECT_CONCURRENT_QUEUE_HPP
 #include <pthread.h>
