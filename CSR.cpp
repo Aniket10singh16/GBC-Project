@@ -191,7 +191,7 @@ int main () {
         pthread_create(&p[i], &attr, t_pool, (void *)(arg+i));
     }
 
-    /*for (int k = 0; k < csr->v_count; k++) {
+    for (int k = 0; k < csr->v_count; k++) {
         cout << "[" << k << "] -- " << csr->vptr[k] << " : ";
 
         if (csr->vptr[k + 1] < 2 * csr->e_count) {
@@ -206,7 +206,7 @@ int main () {
             }
         }
         cout << endl;
-    }*/
+    }
 
 
     /*for (int i = 0; i < csr->v_count; i++)
