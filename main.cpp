@@ -4,7 +4,7 @@
 #include <list>
 #include <pthread.h>
 #include <semaphore.h>
-#include "concurrent_queue.hpp"
+#include "ThreadSafeQueue.hpp"
 
 #define NUM_THREADS  8
 
@@ -18,7 +18,7 @@ pthread_mutex_t mux, update;
 pthread_mutex_t thd;
 pthread_cond_t cond;
 list<int> *th;
-ThreadQueue<int> q;
+ThreadSafeQueue<int> q;
 int *visited;
 
 void wakeSignal(){
@@ -38,7 +38,7 @@ void *t_pool(void *i) {
 
     while (threadend) {
         pthread_mutex_lock(&mux);
-        while (true) {
+        while (1) {
             pthread_cond_wait(&cond, &mux);
             break;
         }
@@ -48,7 +48,7 @@ void *t_pool(void *i) {
             int ver = th[id].front();
             th[id].pop_front();
             if(ver == (csr->v_count-1)){
-                end = csr->e_count;
+                end = 2*csr->e_count;
             }
             else{
                 end=csr->vptr[ver+1];
@@ -72,7 +72,6 @@ void *t_pool(void *i) {
 // ============ BFS CODE ============= //
 void BFS(int s){
     cout << "<=== BFS ===>\n";
-    int x=0;
     q.clear();
     for (int i=0;i<csr->v_count;i++){
         visited[i] =  0;
@@ -86,7 +85,7 @@ void BFS(int s){
         th_complete=0;
         while (!q.empty()) {
             int currvertex=q.front();
-            q.pop_front();
+            //q.pop_front(currvertex);
             cout << "Visited : " << currvertex << " \n";
             th[th_count%(NUM_THREADS-1)].push_back(currvertex);
             th_count++;
@@ -143,7 +142,7 @@ int main () {
         }
         cout << endl;
     }
-    BFS(2);
+    BFS(7);
     threadend =0;
     wakeSignal();
 
