@@ -143,7 +143,7 @@ int main () {
         }
         cout << endl;
     }
-    BFS(3);
+    BFS(2);
     threadend =0;
     wakeSignal();
 
