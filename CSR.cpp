@@ -13,6 +13,7 @@ using namespace std;
 using namespace tq;
 
 int th_complete,threadend=1;
+int th_count =0;
 pthread_mutex_t mux, update;
 pthread_mutex_t thd;
 pthread_cond_t cond;
@@ -20,7 +21,6 @@ pthread_barrier_t barrier;
 list<int> *th;
 ThreadQueue<int> q;
 int *visited;
-//int *parent;
 
 
 typedef struct
@@ -43,6 +43,10 @@ void wakeSignal(){
 void *t_pool(void *i) {
     int id = *((int *) i);
     int end;
+    if(id>=csr->v_count) {
+        cout << "\nThread id Error!! id >= total node count";
+        exit(0);
+    }
 
     while (threadend) {
         pthread_mutex_lock(&mux);
@@ -80,9 +84,9 @@ void *t_pool(void *i) {
 // ============ BFS CODE ============= //
 void BFS(int s){
     cout << "<=== BFS ===>\n";
-    // start vertex 0
+    int x=0;
     q.clear();
-    for (int i=0;i<= csr->v_count;i++){
+    for (int i=0;i<csr->v_count;i++){
         visited[i] =  0;
     }
     cout << "\nMarked all as false" << endl;
@@ -90,7 +94,6 @@ void BFS(int s){
     q.push_back(s);
     visited[s] = 1;
     cout << "starting vertex pushed into queue"<<endl;
-    int th_count =0;
     while(1){
         th_complete=0;
         while (!q.empty()) {
@@ -114,7 +117,6 @@ void BFS(int s){
 void readCSR(){
     ifstream file(R"(D:\WORK\Sem VI\Final_year_Project\graph_data_9.txt)");
     int i=0,j=0;
-    //file.open();
     if(!file.is_open()){
         cerr << "failed to open";
     }
@@ -133,13 +135,17 @@ void readCSR(){
             cout << "\nDynamic Memory Allocation Failed!\n";
             exit(0);
         }
-        file >> left_v >> right_v;
+        file >> left_v;
+        file.ignore();
+        file >> right_v;
         while(!file.eof()){
             prev_v = left_v;
             csr->vptr[i] = j;
             while(prev_v == left_v && !file.eof()){
                 csr->eptr[j] = right_v;
-                file >> left_v >> right_v;
+                file >> left_v;
+                file.ignore();
+                file >> right_v;
                 j++;
                 if(file.eof()){
                     if(prev_v != left_v){
@@ -149,8 +155,6 @@ void readCSR(){
                 }
             }
             i++;
-            //numv.push_back(vl);
-            //nume.push_back(el);
         }
 
 
@@ -161,13 +165,10 @@ void readCSR(){
 
 
 int main () {
-    //vector<int>numv;
-    // vector<int>nume;
-    // int e,v,el,vl,number;
     csr = (Graph *) malloc(sizeof(Graph));
     if (csr == nullptr) {
         printf("\nDynamic memory allocation failed.\n");
-        return 0;
+        exit(0);
     }
     readCSR();
     int n = csr->v_count;
@@ -207,15 +208,7 @@ int main () {
         }
         cout << endl;
     }
-
-
-    /*for (int i = 0; i < csr->v_count; i++)
-    {
-        //int i=3;
-        cout << "\n\nstarting vertex is: "<< i << "\n";
-        BFS(i);
-    }*/
-    BFS(5);
+    BFS(4);
     threadend =0;
     wakeSignal();
 

@@ -14,12 +14,6 @@ namespace tq {
             pthread_cond_init(&m_condv, nullptr);
         }
 
-        ~ThreadQueue() {
-            pthread_mutex_lock(&m_qmtx);
-            m_queue.clear();
-            pthread_mutex_unlock(&m_qmtx);
-        }
-
         void clear() {
             m_queue.clear();
         }
