@@ -4,7 +4,7 @@
 #include <list>
 #include <pthread.h>
 #include <semaphore.h>
-#include "ThreadSafeQueue.hpp"
+#include "concurrent_queue.hpp"
 
 #define NUM_THREADS  8
 
@@ -18,7 +18,7 @@ pthread_mutex_t mux, update;
 pthread_mutex_t thd;
 pthread_cond_t cond;
 list<int> *th;
-ThreadSafeQueue<int> q;
+ThreadQueue<int> q;
 int *visited;
 
 void wakeSignal(){
@@ -73,6 +73,7 @@ void *t_pool(void *i) {
 void BFS(int s){
     cout << "<=== BFS ===>\n";
     q.clear();
+    int cv=0;
     for (int i=0;i<csr->v_count;i++){
         visited[i] =  0;
     }
@@ -80,19 +81,20 @@ void BFS(int s){
 
     q.push_back(s);
     visited[s] = 1;
-    cout << "starting vertex pushed into queue"<<endl;
+    cout << "starting vertex : "<<s<<"pushed into queue"<<"==================================================="<<endl;
     while(1){
         th_complete=0;
         while (!q.empty()) {
             int currvertex=q.front();
-            //q.pop_front(currvertex);
-            cout << "Visited : " << currvertex << " \n";
-            th[th_count%(NUM_THREADS-1)].push_back(currvertex);
+            q.pop_front();
+            th[th_count%(NUM_THREADS)].push_back(currvertex);
+            cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
+            cv++;
         }
-        th_count = th_count%(NUM_THREADS-1);
+        th_count = th_count%(NUM_THREADS);
         wakeSignal();
-        while(th_complete!=(NUM_THREADS)-1);
+        while(th_complete!=(NUM_THREADS));
         if(q.empty()){
             break;
         }
@@ -142,7 +144,7 @@ int main () {
         }
         cout << endl;
     }
-    BFS(7);
+    BFS(3);
     threadend =0;
     wakeSignal();
 
