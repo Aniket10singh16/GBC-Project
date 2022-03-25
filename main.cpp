@@ -12,7 +12,7 @@
 using namespace std;
 using namespace tq;
 
-int th_complete,threadend=1;
+int th_complete,threaddie=1;
 int th_count =0;
 pthread_mutex_t mux, update;
 pthread_mutex_t thd;
@@ -36,7 +36,7 @@ void *t_pool(void *i) {
         exit(0);
     }
 
-    while (threadend) {
+    while (threaddie) {
         pthread_mutex_lock(&mux);
         while (1) {
             pthread_cond_wait(&cond, &mux);
@@ -81,7 +81,7 @@ void BFS(int s){
 
     q.push_back(s);
     visited[s] = 1;
-    cout << "starting vertex : "<<s<<"pushed into queue"<<"==================================================="<<endl;
+    cout << "starting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
     while(1){
         th_complete=0;
         while (!q.empty()) {
@@ -145,7 +145,7 @@ int main () {
         cout << endl;
     }
     BFS(3);
-    threadend =0;
+    threaddie =0;
     wakeSignal();
 
     for(auto & i : p){
