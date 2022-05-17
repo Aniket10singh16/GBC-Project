@@ -2,24 +2,33 @@
 #include "CSR.cpp"
 #include <deque>
 #include <list>
+#include <stack>
 #include <pthread.h>
 #include <semaphore.h>
+#include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS  8
-
+#define NUM_THREADS 8
 
 using namespace std;
 using namespace tq;
 
 int th_complete,threaddie=1;
-int th_count =0;
-pthread_mutex_t mux, update;
+int Start, th_count =0;
+pthread_mutex_t mux, update,FCUpdate, innerUp, BCUpdate;
 pthread_mutex_t thd;
 pthread_cond_t cond;
 list<int> *th;
+list<int> *th1;
 ThreadQueue<int> q;
+stack<int> S;
 int *visited;
+int *sigma;
+float *delta;
+float *BC;
+list<int> *parent;
+struct timespec start, finish;
+double elapsed;
 
 void wakeSignal(){
     pthread_mutex_lock(&mux);
@@ -31,14 +40,15 @@ void wakeSignal(){
 void *t_pool(void *i) {
     int id = *((int *) i);
     int end;
-    if(id>=csr->v_count) {
+
+    if(id>=2*csr->e_count) {
         cout << "\nThread id Error!! id >= total node count";
         exit(0);
     }
 
     while (threaddie) {
         pthread_mutex_lock(&mux);
-        while (1) {
+        while (true) {
             pthread_cond_wait(&cond, &mux);
             break;
         }
@@ -47,6 +57,7 @@ void *t_pool(void *i) {
         while (!th[id].empty()) {
             int ver = th[id].front();
             th[id].pop_front();
+
             if(ver == (csr->v_count-1)){
                 end = 2*csr->e_count;
             }
@@ -54,10 +65,14 @@ void *t_pool(void *i) {
                 end=csr->vptr[ver+1];
             }
             for (int j = csr->vptr[ver]; j < end; ++j) {
-                if (visited[csr->eptr[j]]==0) {
-                    visited[csr->eptr[j]] = visited[ver]+1;
-                    //parent[j]=ver;
-                    q.push_back(csr->eptr[j]);
+                int w = csr->eptr[j];
+                if (visited[w]==-1) {
+                    visited[w] = visited[ver]+1;
+                    q.push_back(w);
+                }
+                if ((visited[w]-1)== visited[ver]){
+                    sigma[w] +=  sigma[ver];
+                    parent[w].emplace_back(ver);
                 }
             }
         }
@@ -66,27 +81,19 @@ void *t_pool(void *i) {
         th_complete++;
         pthread_mutex_unlock(&update);
     }
+
     pthread_exit(nullptr);
 }
 
-// ============ BFS CODE ============= //
-void BFS(int s){
-    cout << "<=== BFS ===>\n";
-    q.clear();
-    int cv=0;
-    for (int i=0;i<csr->v_count;i++){
-        visited[i] =  0;
-    }
-    cout << "\nMarked all as false" << endl;
-
-    q.push_back(s);
-    visited[s] = 1;
-    cout << "starting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
-    while(1){
+// ========= Forward Phase =========== //
+void Forward(int s, int cv){
+    cout << "\nstarting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
+    while(true){
         th_complete=0;
         while (!q.empty()) {
             int currvertex=q.front();
             q.pop_front();
+            S.push(currvertex);
             th[th_count%(NUM_THREADS)].push_back(currvertex);
             cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
@@ -95,39 +102,66 @@ void BFS(int s){
         th_count = th_count%(NUM_THREADS);
         wakeSignal();
         while(th_complete!=(NUM_THREADS));
-        if(q.empty()){
+        if(q.empty() ){
             break;
         }
     }
 }
 
-int main () {
-    csr = (Graph *) malloc(sizeof(Graph));
-    if (csr == nullptr) {
-        printf("\nDynamic memory allocation failed.\n");
-        exit(0);
+// ========= Backward Phase =========== //
+void BackPropagation(){
+
+    while (!S.empty()) {
+        int P = S.top();
+        S.pop();
+        for (auto j : parent[P]) {
+
+            delta[j] += ((float) sigma[j] / (float) sigma[P]) * (1 + delta[P]);
+            cout << "\n dependency: " << delta[j];
+
+        }
+        if (P != Start) {
+            pthread_mutex_lock(&BCUpdate);
+            BC[P] += delta[P] / 2;
+            pthread_mutex_unlock(&BCUpdate);
+        }
     }
-    readCSR();
+
+}
+
+// ============ Print No. Of Shortest Path ============= //
+void ShortPath(int s){
+    printf("-----------------  No. of shortest paths from node %d ------------------\n", s);
+    for (int a = 0; a < csr->v_count; a++)
+    {
+        printf("Node %d is %d \n", a, sigma[a]);
+    }
+}
+
+// ============ BetweennessCentrality CODE ============= //
+void BetweennessCentrality(int s){
+    q.clear();
+    int cv =0;
     int n = csr->v_count;
-    visited = (int *) calloc(n, sizeof(int));
-    //parent = (int*)calloc(n, sizeof(int));
 
-    pthread_t p[NUM_THREADS];
-    th = new list<int>[NUM_THREADS];
-    pthread_mutex_init(&mux, nullptr);
-    pthread_mutex_init(&update, nullptr);
-    pthread_mutex_init(&thd, nullptr);
-    pthread_cond_init(&cond, nullptr);
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    parent = new list<int>[n];
 
-    int arg[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++) {
-        arg[i]=i;
-        pthread_create(&p[i], &attr, t_pool, (void *)(arg+i));
+    for (int i=0;i<n;i++){
+        visited[i]=-1;
+        sigma[i]=0;
+        delta[i]=0.0;
     }
 
+    th_count=0;
+    visited[s] = 0;
+    sigma[s]=1;
+    q.push_back(s);
+    Forward(n,cv);
+    BackPropagation();
+    //ShortPath(s);
+}
+// ============== PRINT CSR =============== //
+void PrintCSR(){
     for (int k = 0; k < csr->v_count; k++) {
         cout << "[" << k << "] -- " << csr->vptr[k] << " : ";
 
@@ -144,7 +178,65 @@ int main () {
         }
         cout << endl;
     }
-    BFS(3);
+}
+
+// ============== PRINT BWC =============== //
+void PrintBWC(){
+    cout<< " \n\nprint Betweenness Centrality==>";
+    for(int i=0; i<csr->v_count;i++){
+        cout << " \nvertex: " << i<<" ==> " << BC[i];
+    }
+}
+
+// ============== INITIALIZE ============== //
+void Initialize(){
+    int n = csr->v_count;
+    visited = (int *) calloc(n,sizeof (int));
+    sigma = (int *) calloc(n, sizeof (int));
+    delta = (float *) calloc(n, sizeof(float));
+    BC = (float *) calloc(n, sizeof(float));
+    for(int i=0;i<n;i++){ BC[i]=0;}
+    th = new list<int>[NUM_THREADS];
+    th1 = new list<int>[NUM_THREADS];
+    pthread_mutex_init(&mux, nullptr);
+    pthread_mutex_init(&update, nullptr);
+    pthread_mutex_init(&thd, nullptr);
+    pthread_mutex_init(&FCUpdate, nullptr);
+    pthread_mutex_init(&innerUp, nullptr);
+    pthread_mutex_init(&BCUpdate, nullptr);
+    pthread_cond_init(&cond, nullptr);
+}
+
+int main () {
+    csr = (Graph *) malloc(sizeof(Graph));
+    if (csr == nullptr) {
+        printf("\nDynamic memory allocation failed.\n");
+        exit(0);
+    }
+    readCSR();
+    Initialize();
+    pthread_t p[NUM_THREADS];
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    int arg[NUM_THREADS];
+    for (int i = 0; i < NUM_THREADS; i++) {
+        arg[i]=i;
+        pthread_create(&p[i], &attr, t_pool, (void *)(arg+i));
+    }
+    PrintCSR();
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    for(int b=0; b<csr->v_count;b++){
+        Start = b;
+        BetweennessCentrality(b);
+    }
+
+    clock_gettime(CLOCK_REALTIME, &finish);
+    elapsed = ((double)finish.tv_sec - (double)start.tv_sec);
+    elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
+    printf("Pthread implementation time: %f\n", elapsed);
+
     threaddie =0;
     wakeSignal();
 
@@ -152,7 +244,14 @@ int main () {
         pthread_join(i,nullptr);
     }
 
+    PrintBWC();
+
     free(visited);
-    //free(parent);
+    free(delta);
+    free(sigma);
+    free(BC);
+    parent->clear();
+    th->clear();
     return 0;
 }
+
