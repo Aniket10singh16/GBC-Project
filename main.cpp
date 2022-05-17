@@ -8,13 +8,13 @@
 #include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS 8
+#define NUM_THREADS 4
 
 using namespace std;
 using namespace tq;
 
-int th_complete,threaddie=1;
-int Start, th_count =0;
+int th_complete,th1_complete,threaddie=1,frontPhase=1,backPhase=1;
+int Start, th_count =0,th1_count=0;
 pthread_mutex_t mux, update,FCUpdate, innerUp, BCUpdate;
 pthread_mutex_t thd;
 pthread_cond_t cond;
@@ -24,7 +24,7 @@ ThreadQueue<int> q;
 stack<int> S;
 int *visited;
 int *sigma;
-float *delta;
+vector<float> delta;
 float *BC;
 list<int> *parent;
 struct timespec start, finish;
@@ -53,35 +53,49 @@ void *t_pool(void *i) {
             break;
         }
         pthread_mutex_unlock(&mux);
-
         while (!th[id].empty()) {
-            int ver = th[id].front();
-            th[id].pop_front();
+                int ver = th[id].front();
+                th[id].pop_front();
 
-            if(ver == (csr->v_count-1)){
-                end = 2*csr->e_count;
-            }
-            else{
-                end=csr->vptr[ver+1];
-            }
-            for (int j = csr->vptr[ver]; j < end; ++j) {
-                int w = csr->eptr[j];
-                if (visited[w]==-1) {
-                    visited[w] = visited[ver]+1;
-                    q.push_back(w);
+                if (ver == (csr->v_count - 1)) {
+                    end = 2 * csr->e_count;
+                } else {
+                    end = csr->vptr[ver + 1];
                 }
-                if ((visited[w]-1)== visited[ver]){
-                    sigma[w] +=  sigma[ver];
-                    parent[w].emplace_back(ver);
+                for (int j = csr->vptr[ver]; j < end; ++j) {
+                    int w = csr->eptr[j];
+                    if (visited[w] == -1) {
+                        visited[w] = visited[ver] + 1;
+                        q.push_back(w);
+                    }
+                    if ((visited[w] - 1) == visited[ver]) {
+                        sigma[w] += sigma[ver];
+                        parent[w].emplace_back(ver);
+                    }
                 }
+                delta[ver]=1/(float)sigma[ver];
             }
+
+        while (!th1[id].empty()) {
+            int w = th1[id].front();
+            th1[id].pop_front();
+            //pthread_mutex_lock(&innerUp);
+            for (auto v: parent[w]) {
+                //pthread_mutex_lock(&FCUpdate);
+                delta[v] += delta[w];
+                //pthread_mutex_unlock(&FCUpdate);
+            } //pthread_mutex_unlock(&innerUp);
+            if(w!=Start){
+                pthread_mutex_lock(&BCUpdate);
+                BC[w] += (delta[w]*(float)sigma[w]-1);
+                pthread_mutex_unlock(&BCUpdate);
+            }
+
         }
-
         pthread_mutex_lock(&update);
         th_complete++;
         pthread_mutex_unlock(&update);
     }
-
     pthread_exit(nullptr);
 }
 
@@ -95,7 +109,7 @@ void Forward(int s, int cv){
             q.pop_front();
             S.push(currvertex);
             th[th_count%(NUM_THREADS)].push_back(currvertex);
-            cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
+            //cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
             cv++;
         }
@@ -109,24 +123,22 @@ void Forward(int s, int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(){
-
-    while (!S.empty()) {
-        int P = S.top();
-        S.pop();
-        for (auto j : parent[P]) {
-
-            delta[j] += ((float) sigma[j] / (float) sigma[P]) * (1 + delta[P]);
-            cout << "\n dependency: " << delta[j];
-
+void BackPropagation(int s){
+    while (true) {
+        th_complete=0;
+        while (!S.empty()) {
+            int w = S.top();
+            S.pop();
+            th1[th_count % (NUM_THREADS)].push_back(w);
+            th_count++;
         }
-        if (P != Start) {
-            pthread_mutex_lock(&BCUpdate);
-            BC[P] += delta[P] / 2;
-            pthread_mutex_unlock(&BCUpdate);
+        th_count = th_count % (NUM_THREADS);
+        wakeSignal();
+        while(th_complete!=(NUM_THREADS));
+        if(S.empty() ){
+            break;
         }
     }
-
 }
 
 // ============ Print No. Of Shortest Path ============= //
@@ -143,22 +155,22 @@ void BetweennessCentrality(int s){
     q.clear();
     int cv =0;
     int n = csr->v_count;
-
+    delta.assign(n,0);
     parent = new list<int>[n];
 
     for (int i=0;i<n;i++){
         visited[i]=-1;
         sigma[i]=0;
-        delta[i]=0.0;
     }
 
-    th_count=0;
     visited[s] = 0;
     sigma[s]=1;
     q.push_back(s);
-    Forward(n,cv);
-    BackPropagation();
+    Forward(s,cv);
+    th_count=0;
+    BackPropagation(s);
     //ShortPath(s);
+    delta.clear();
 }
 // ============== PRINT CSR =============== //
 void PrintCSR(){
@@ -184,7 +196,7 @@ void PrintCSR(){
 void PrintBWC(){
     cout<< " \n\nprint Betweenness Centrality==>";
     for(int i=0; i<csr->v_count;i++){
-        cout << " \nvertex: " << i<<" ==> " << BC[i];
+        cout << " \nvertex: " << i<<" ==> " << BC[i]/2;
     }
 }
 
@@ -193,7 +205,7 @@ void Initialize(){
     int n = csr->v_count;
     visited = (int *) calloc(n,sizeof (int));
     sigma = (int *) calloc(n, sizeof (int));
-    delta = (float *) calloc(n, sizeof(float));
+    //delta = (float *) calloc(n, sizeof(float));
     BC = (float *) calloc(n, sizeof(float));
     for(int i=0;i<n;i++){ BC[i]=0;}
     th = new list<int>[NUM_THREADS];
@@ -224,7 +236,7 @@ int main () {
         arg[i]=i;
         pthread_create(&p[i], &attr, t_pool, (void *)(arg+i));
     }
-    PrintCSR();
+    //PrintCSR();
     clock_gettime(CLOCK_REALTIME, &start);
 
     for(int b=0; b<csr->v_count;b++){
@@ -235,7 +247,7 @@ int main () {
     clock_gettime(CLOCK_REALTIME, &finish);
     elapsed = ((double)finish.tv_sec - (double)start.tv_sec);
     elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
-    printf("Pthread implementation time: %f\n", elapsed);
+    printf("\nPthread implementation time: %f\n", elapsed);
 
     threaddie =0;
     wakeSignal();
@@ -247,7 +259,7 @@ int main () {
     PrintBWC();
 
     free(visited);
-    free(delta);
+    //free(delta);
     free(sigma);
     free(BC);
     parent->clear();
