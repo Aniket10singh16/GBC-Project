@@ -13,8 +13,8 @@
 using namespace std;
 using namespace tq;
 
-int th_complete,th1_complete,threaddie=1,frontPhase=1,backPhase=1;
-int Start,StackV, th_count =0,th1_count=0;
+int th_complete,threaddie=1;
+int Start,StackV, th_count =0;
 pthread_mutex_t mux, update,FCUpdate, innerUp, BCUpdate;
 pthread_mutex_t thd;
 pthread_cond_t cond;
@@ -80,12 +80,11 @@ void *t_pool(void *i) {
             int w = th1[id].front();
             th1[id].pop_front();
             pthread_mutex_lock(&innerUp);
-            //pthread_mutex_lock(&FCUpdate);
             delta[w] += delta[StackV];
-            cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
-            //pthread_mutex_unlock(&FCUpdate);
+            //cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
             pthread_mutex_unlock(&innerUp);
         }
+
         pthread_mutex_lock(&update);
         th_complete++;
         pthread_mutex_unlock(&update);
@@ -93,9 +92,20 @@ void *t_pool(void *i) {
     pthread_exit(nullptr);
 }
 
+// ======== BetweennessCentrality Accumulation ========= //
+void BwcAccumulate(int n,int s){
+    for(int v=0; v<n;v++) {
+        if (v != s) {
+            //pthread_mutex_lock(&BCUpdate);
+            BC[v] += (delta[v] * (float) sigma[v] - 1);
+            // pthread_mutex_unlock(&BCUpdate);
+        }
+    }
+}
+
 // ========= Forward Phase =========== //
-void Forward(int s, int cv){
-    cout << "\nstarting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
+void Forward(int cv){
+    //cout << "\nstarting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
     while(true){
         th_complete=0;
         while (!q.empty()) {
@@ -117,34 +127,28 @@ void Forward(int s, int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(int s){
-        while (!S.empty()) {
-            th_count=0;
-            th_complete=0;
-            StackV = S.top();
-            S.pop();
-            int itr =0;
-            while(true) {
-                for (auto j: parent[StackV]) {
-                    th1[th_count % (NUM_THREADS)].push_back(j);
-                    th_count++;
-                    itr++;
-                }
-                th_count = th_count % (NUM_THREADS);
-                wakeSignal();
-                while (th_complete != (NUM_THREADS));
-                if (itr >= parent[StackV].size()) {
-                    break;
-                }
+void BackPropagation(int s, int n){
+    while (!S.empty()) {
+        th_count=0;
+        th_complete=0;
+        StackV = S.top();
+        S.pop();
+        int itr =0;
+        while(true) {
+            for (auto j: parent[StackV]) {
+                th1[th_count % (NUM_THREADS)].push_back(j);
+                th_count++;
+                itr++;
             }
-    }
-    for(int v=0;v<csr->v_count;v++){
-        if(v!=s){
-            //pthread_mutex_lock(&BCUpdate);
-            BC[v] += (delta[v]*(float)sigma[v]-1);
-           // pthread_mutex_unlock(&BCUpdate);
+            th_count = th_count % (NUM_THREADS);
+            wakeSignal();
+            while (th_complete != (NUM_THREADS));
+            if (itr >= parent[StackV].size()) {
+                break;
+            }
         }
     }
+    BwcAccumulate(n,s);
 }
 
 // ============ Print No. Of Shortest Path ============= //
@@ -172,9 +176,9 @@ void BetweennessCentrality(int s){
     visited[s] = 0;
     sigma[s]=1;
     q.push_back(s);
-    Forward(s,cv);
+    Forward(cv);
     th_count=0;
-    BackPropagation(s);
+    BackPropagation(s,n);
     //ShortPath(s);
     delta.clear();
 }
@@ -246,7 +250,6 @@ int main () {
     clock_gettime(CLOCK_REALTIME, &start);
 
     for(int b=0; b<csr->v_count;b++){
-        Start = b;
         BetweennessCentrality(b);
     }
 
