@@ -18,7 +18,7 @@ int left_v,right_v,prev_v;
 
 //<========== CSR ============>
 void readCSR(){
-    ifstream file(R"(D:\WORK\Sem VI\Final_year_Project\dolphins1.txt)");
+    ifstream file(R"(D:\WORK\Sem VI\Final_year_Project\test.txt)");
     int i=0,j=0;
     if(!file.is_open()){
         cerr << "failed to open";

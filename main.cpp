@@ -14,7 +14,7 @@ using namespace std;
 using namespace tq;
 
 int th_complete,th1_complete,threaddie=1,frontPhase=1,backPhase=1;
-int Start, th_count =0,th1_count=0;
+int Start,StackV, th_count =0,th1_count=0;
 pthread_mutex_t mux, update,FCUpdate, innerUp, BCUpdate;
 pthread_mutex_t thd;
 pthread_cond_t cond;
@@ -79,18 +79,12 @@ void *t_pool(void *i) {
         while (!th1[id].empty()) {
             int w = th1[id].front();
             th1[id].pop_front();
-            //pthread_mutex_lock(&innerUp);
-            for (auto v: parent[w]) {
-                //pthread_mutex_lock(&FCUpdate);
-                delta[v] += delta[w];
-                //pthread_mutex_unlock(&FCUpdate);
-            } //pthread_mutex_unlock(&innerUp);
-            if(w!=Start){
-                pthread_mutex_lock(&BCUpdate);
-                BC[w] += (delta[w]*(float)sigma[w]-1);
-                pthread_mutex_unlock(&BCUpdate);
-            }
-
+            pthread_mutex_lock(&innerUp);
+            //pthread_mutex_lock(&FCUpdate);
+            delta[w] += delta[StackV];
+            cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
+            //pthread_mutex_unlock(&FCUpdate);
+            pthread_mutex_unlock(&innerUp);
         }
         pthread_mutex_lock(&update);
         th_complete++;
@@ -124,19 +118,31 @@ void Forward(int s, int cv){
 
 // ========= Backward Phase =========== //
 void BackPropagation(int s){
-    while (true) {
-        th_complete=0;
         while (!S.empty()) {
-            int w = S.top();
+            th_count=0;
+            th_complete=0;
+            StackV = S.top();
             S.pop();
-            th1[th_count % (NUM_THREADS)].push_back(w);
-            th_count++;
-        }
-        th_count = th_count % (NUM_THREADS);
-        wakeSignal();
-        while(th_complete!=(NUM_THREADS));
-        if(S.empty() ){
-            break;
+            int itr =0;
+            while(true) {
+                for (auto j: parent[StackV]) {
+                    th1[th_count % (NUM_THREADS)].push_back(j);
+                    th_count++;
+                    itr++;
+                }
+                th_count = th_count % (NUM_THREADS);
+                wakeSignal();
+                while (th_complete != (NUM_THREADS));
+                if (itr >= parent[StackV].size()) {
+                    break;
+                }
+            }
+    }
+    for(int v=0;v<csr->v_count;v++){
+        if(v!=s){
+            //pthread_mutex_lock(&BCUpdate);
+            BC[v] += (delta[v]*(float)sigma[v]-1);
+           // pthread_mutex_unlock(&BCUpdate);
         }
     }
 }
