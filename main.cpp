@@ -8,18 +8,16 @@
 #include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS 4
+#define NUM_THREADS 6
 
 using namespace std;
 using namespace tq;
 
-int th_complete,threaddie=1;
+int th_complete,threaddie=1,FrontPhase=1,BackPhase=0,BCAccumulate=0;
 int Start,StackV, th_count =0;
-pthread_mutex_t mux, update,FCUpdate, innerUp, BCUpdate;
-pthread_mutex_t thd;
+pthread_mutex_t mux, update, innerUp, BCUpdate;
 pthread_cond_t cond;
 list<int> *th;
-list<int> *th1;
 ThreadQueue<int> q;
 stack<int> S;
 int *visited;
@@ -34,6 +32,12 @@ void wakeSignal(){
     pthread_mutex_lock(&mux);
     pthread_cond_broadcast(&cond);
     pthread_mutex_unlock(&mux);
+}
+
+void ThreadUpdate(){
+    pthread_mutex_lock(&update);
+    th_complete++;
+    pthread_mutex_unlock(&update);
 }
 
 //<========== THREAD POOL ===========>
@@ -53,6 +57,7 @@ void *t_pool(void *i) {
             break;
         }
         pthread_mutex_unlock(&mux);
+        if(FrontPhase==1){
         while (!th[id].empty()) {
                 int ver = th[id].front();
                 th[id].pop_front();
@@ -75,30 +80,54 @@ void *t_pool(void *i) {
                 }
                 delta[ver]=1/(float)sigma[ver];
             }
+        ThreadUpdate();
+        }
 
-        while (!th1[id].empty()) {
-            int w = th1[id].front();
-            th1[id].pop_front();
+        if(BackPhase==1){
+        while (!th[id].empty()) {
+            int w = th[id].front();
+            th[id].pop_front();
             pthread_mutex_lock(&innerUp);
             delta[w] += delta[StackV];
             //cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
             pthread_mutex_unlock(&innerUp);
         }
+            ThreadUpdate();
+        }
 
-        pthread_mutex_lock(&update);
-        th_complete++;
-        pthread_mutex_unlock(&update);
+        if(BCAccumulate==1){
+            while (!th[id].empty()) {
+                int v = th[id].front();
+                th[id].pop_front();
+                if(v!=Start){
+                    pthread_mutex_lock(&BCUpdate);
+                    BC[v] += (delta[v] * (float) sigma[v] - 1);
+                    pthread_mutex_unlock(&BCUpdate);
+                }
+            }
+            ThreadUpdate();
+        }
+
     }
     pthread_exit(nullptr);
 }
 
 // ======== BetweennessCentrality Accumulation ========= //
-void BwcAccumulate(int n,int s){
-    for(int v=0; v<n;v++) {
-        if (v != s) {
-            //pthread_mutex_lock(&BCUpdate);
-            BC[v] += (delta[v] * (float) sigma[v] - 1);
-            // pthread_mutex_unlock(&BCUpdate);
+void BwcAccumulate(int n){
+    th_count=0;
+    while(true) {
+        th_complete=0;
+        int v=0;
+        while(v<n){
+            th[th_count % (NUM_THREADS)].push_back(v);
+            th_count++;
+            v++;
+        }
+        th_count = th_count % (NUM_THREADS);
+        wakeSignal();
+        while (th_complete != (NUM_THREADS));
+        if (v >= n) {
+            break;
         }
     }
 }
@@ -136,7 +165,7 @@ void BackPropagation(int s, int n){
         int itr =0;
         while(true) {
             for (auto j: parent[StackV]) {
-                th1[th_count % (NUM_THREADS)].push_back(j);
+                th[th_count % (NUM_THREADS)].push_back(j);
                 th_count++;
                 itr++;
             }
@@ -148,7 +177,7 @@ void BackPropagation(int s, int n){
             }
         }
     }
-    BwcAccumulate(n,s);
+
 }
 
 // ============ Print No. Of Shortest Path ============= //
@@ -163,6 +192,7 @@ void ShortPath(int s){
 // ============ BetweennessCentrality CODE ============= //
 void BetweennessCentrality(int s){
     q.clear();
+    Start = s;
     int cv =0;
     int n = csr->v_count;
     delta.assign(n,0);
@@ -177,10 +207,17 @@ void BetweennessCentrality(int s){
     sigma[s]=1;
     q.push_back(s);
     Forward(cv);
+    FrontPhase=0;
+    BackPhase=1;
     th_count=0;
     BackPropagation(s,n);
+    BackPhase=0;
+    BCAccumulate=1;
+    BwcAccumulate(n);
+    BCAccumulate=0;
     //ShortPath(s);
     delta.clear();
+    FrontPhase=1;
 }
 // ============== PRINT CSR =============== //
 void PrintCSR(){
@@ -219,11 +256,9 @@ void Initialize(){
     BC = (float *) calloc(n, sizeof(float));
     for(int i=0;i<n;i++){ BC[i]=0;}
     th = new list<int>[NUM_THREADS];
-    th1 = new list<int>[NUM_THREADS];
+    //th1 = new list<int>[NUM_THREADS];
     pthread_mutex_init(&mux, nullptr);
     pthread_mutex_init(&update, nullptr);
-    pthread_mutex_init(&thd, nullptr);
-    pthread_mutex_init(&FCUpdate, nullptr);
     pthread_mutex_init(&innerUp, nullptr);
     pthread_mutex_init(&BCUpdate, nullptr);
     pthread_cond_init(&cond, nullptr);
@@ -253,17 +288,17 @@ int main () {
         BetweennessCentrality(b);
     }
 
-    clock_gettime(CLOCK_REALTIME, &finish);
-    elapsed = ((double)finish.tv_sec - (double)start.tv_sec);
-    elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
-    printf("\nPthread implementation time: %f\n", elapsed);
-
     threaddie =0;
     wakeSignal();
 
     for(auto & i : p){
         pthread_join(i,nullptr);
     }
+
+    clock_gettime(CLOCK_REALTIME, &finish);
+    elapsed = ((double)finish.tv_sec - (double)start.tv_sec);
+    elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
+    printf("\nPthread implementation time: %f\n", elapsed);
 
     PrintBWC();
 
