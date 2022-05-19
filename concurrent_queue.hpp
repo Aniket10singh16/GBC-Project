@@ -9,7 +9,7 @@ namespace tq {
 
     class ThreadQueue {
     public:
-        ThreadQueue() {
+        ThreadQueue() noexcept{
             pthread_mutex_init(&m_qmtx, nullptr);
             pthread_cond_init(&m_condv, nullptr);
         }
