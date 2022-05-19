@@ -114,8 +114,9 @@ void *t_pool(void *i) {
 
 // ======== BetweennessCentrality Accumulation ========= //
 void BwcAccumulate(int n){
-    th_count=0;
+
     while(true) {
+        th_count=0;
         th_complete=0;
         int v=0;
         while(v<n){
@@ -148,7 +149,7 @@ void Forward(int cv){
         }
         th_count = th_count%(NUM_THREADS);
         wakeSignal();
-        while(th_complete!=(NUM_THREADS));
+        while(th_complete<(NUM_THREADS));
         if(q.empty() ){
             break;
         }
@@ -156,7 +157,7 @@ void Forward(int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(int s, int n){
+void BackPropagation(){
     while (!S.empty()) {
         th_count=0;
         th_complete=0;
@@ -209,8 +210,7 @@ void BetweennessCentrality(int s){
     Forward(cv);
     FrontPhase=0;
     BackPhase=1;
-    th_count=0;
-    BackPropagation(s,n);
+    BackPropagation();
     BackPhase=0;
     BCAccumulate=1;
     BwcAccumulate(n);
@@ -303,7 +303,7 @@ int main () {
     PrintBWC();
 
     free(visited);
-    //free(delta);
+    delta.clear();
     free(sigma);
     free(BC);
     parent->clear();
