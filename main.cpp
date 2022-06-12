@@ -8,7 +8,7 @@
 #include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS 6
+#define NUM_THREADS 8
 
 using namespace std;
 using namespace tq;
@@ -30,7 +30,7 @@ double elapsed;
 
 void wakeSignal(){
     pthread_mutex_lock(&mux);
-    pthread_cond_broadcast(&cond);
+           pthread_cond_broadcast(&cond);
     pthread_mutex_unlock(&mux);
 }
 
@@ -44,12 +44,6 @@ void ThreadUpdate(){
 void *t_pool(void *i) {
     int id = *((int *) i);
     int end;
-
-    if(id>=2*csr->e_count) {
-        cout << "\nThread id Error!! id >= total node count";
-        exit(0);
-    }
-
     while (threaddie) {
         pthread_mutex_lock(&mux);
         while (true) {
@@ -80,19 +74,19 @@ void *t_pool(void *i) {
                 }
                 delta[ver]=1/(float)sigma[ver];
             }
-        ThreadUpdate();
+
         }
 
         if(BackPhase==1){
         while (!th[id].empty()) {
             int w = th[id].front();
             th[id].pop_front();
-            pthread_mutex_lock(&innerUp);
+           // pthread_mutex_lock(&innerUp);
             delta[w] += delta[StackV];
             //cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
-            pthread_mutex_unlock(&innerUp);
+           // pthread_mutex_unlock(&innerUp);
         }
-            ThreadUpdate();
+            //ThreadUpdate();
         }
 
         if(BCAccumulate==1){
@@ -105,9 +99,9 @@ void *t_pool(void *i) {
                     pthread_mutex_unlock(&BCUpdate);
                 }
             }
-            ThreadUpdate();
+            //ThreadUpdate();
         }
-
+        ThreadUpdate();
     }
     pthread_exit(nullptr);
 }
@@ -135,7 +129,7 @@ void BwcAccumulate(int n){
 
 // ========= Forward Phase =========== //
 void Forward(int cv){
-    //cout << "\nstarting vertex : "<<s<<" pushed into queue"<<"\n==================================================="<<endl;
+    cout << "\nstarting vertex : "<<Start<<" pushed into queue"<<"\n==================================================="<<endl;
     while(true){
         th_complete=0;
         while (!q.empty()) {
@@ -143,13 +137,13 @@ void Forward(int cv){
             q.pop_front();
             S.push(currvertex);
             th[th_count%(NUM_THREADS)].push_back(currvertex);
-            //cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
+            cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
             cv++;
         }
         th_count = th_count%(NUM_THREADS);
         wakeSignal();
-        while(th_complete<(NUM_THREADS));
+        while(th_complete!=(NUM_THREADS));
         if(q.empty() ){
             break;
         }
@@ -157,29 +151,26 @@ void Forward(int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(){
-    while (!S.empty()) {
-        th_count=0;
-        th_complete=0;
-        StackV = S.top();
-        S.pop();
+void BackPropagation(int SV){
+    while(true) {
         int itr =0;
-        while(true) {
-            for (auto j: parent[StackV]) {
-                th[th_count % (NUM_THREADS)].push_back(j);
-                th_count++;
-                itr++;
-            }
-            th_count = th_count % (NUM_THREADS);
-            wakeSignal();
-            while (th_complete != (NUM_THREADS));
-            if (itr >= parent[StackV].size()) {
-                break;
-            }
+        th_complete=0;
+        th_count=0;
+        for (auto j: parent[SV]) {
+            th[th_count % (NUM_THREADS)].push_back(j);
+            th_count++;
+            itr++;
+        }
+        th_count = th_count % (NUM_THREADS);
+        wakeSignal();
+        while (th_complete != (NUM_THREADS));
+        if (itr != parent[StackV].size()-1 || parent[StackV].empty()) {
+            break;
         }
     }
-
 }
+
+
 
 // ============ Print No. Of Shortest Path ============= //
 void ShortPath(int s){
@@ -210,7 +201,12 @@ void BetweennessCentrality(int s){
     Forward(cv);
     FrontPhase=0;
     BackPhase=1;
-    BackPropagation();
+    th_count=0;
+    while(!S.empty()){
+        StackV = S.top();
+        S.pop();
+        BackPropagation(StackV);
+    }
     BackPhase=0;
     BCAccumulate=1;
     BwcAccumulate(n);
@@ -294,6 +290,9 @@ int main () {
     for(auto & i : p){
         pthread_join(i,nullptr);
     }
+    for(auto & i : p){
+        pthread_kill(i,NUM_THREADS);
+    }
 
     clock_gettime(CLOCK_REALTIME, &finish);
     elapsed = ((double)finish.tv_sec - (double)start.tv_sec);
@@ -308,6 +307,11 @@ int main () {
     free(BC);
     parent->clear();
     th->clear();
+    pthread_mutex_destroy(&mux);
+    pthread_mutex_destroy(&update);
+    pthread_mutex_destroy(&innerUp);
+    pthread_mutex_destroy(&BCUpdate);
+    pthread_cond_destroy(&cond);
     return 0;
 }
 

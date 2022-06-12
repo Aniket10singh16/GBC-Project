@@ -8,3 +8,5 @@ add_executable(Final_year_Project main.cpp)
 add_executable(CSR CSR.cpp )
 
 add_executable(GraphCreation GraphCreation.c)
+
+add_executable(main1 main1.cpp)
