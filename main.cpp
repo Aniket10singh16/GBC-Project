@@ -74,19 +74,14 @@ void *t_pool(void *i) {
                 }
                 delta[ver]=1/(float)sigma[ver];
             }
-
         }
 
         if(BackPhase==1){
-        while (!th[id].empty()) {
-            int w = th[id].front();
-            th[id].pop_front();
-           // pthread_mutex_lock(&innerUp);
-            delta[w] += delta[StackV];
-            //cout << "\nDependency: " << delta[w] << " of vertex: " << StackV << " Thread id: "<<id;
-           // pthread_mutex_unlock(&innerUp);
-        }
-            //ThreadUpdate();
+            while (!th[id].empty()) {
+               int w = th[id].front();
+               th[id].pop_front();
+               delta[w] += delta[StackV];
+            }
         }
 
         if(BCAccumulate==1){
@@ -99,7 +94,6 @@ void *t_pool(void *i) {
                     pthread_mutex_unlock(&BCUpdate);
                 }
             }
-            //ThreadUpdate();
         }
         ThreadUpdate();
     }
