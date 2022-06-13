@@ -2,7 +2,6 @@
 #include "CSR.cpp"
 #include <deque>
 #include <list>
-#include <stack>
 #include <pthread.h>
 #include <semaphore.h>
 #include <vector>
@@ -16,10 +15,10 @@ using namespace tq;
 int th_complete,threaddie=1,FrontPhase=1,BackPhase=0,BCAccumulate=0;
 int Start,StackV, th_count =0;
 pthread_mutex_t mux, update, innerUp, BCUpdate;
-pthread_cond_t cond;
+pthread_cond_t cond, upadateCond;
 list<int> *th;
 ThreadQueue<int> q;
-stack<int> S;
+vector<int> S;
 int *visited;
 int *sigma;
 vector<float> delta;
@@ -74,14 +73,22 @@ void *t_pool(void *i) {
                 }
                 delta[ver]=1/(float)sigma[ver];
             }
+            ThreadUpdate();
         }
 
         if(BackPhase==1){
             while (!th[id].empty()) {
                int w = th[id].front();
                th[id].pop_front();
-               delta[w] += delta[StackV];
+                pthread_mutex_lock(&innerUp);
+                 delta[w] += delta[StackV];
+                //cout << " \nFOR Vertex" << w << "delta = " << delta[w];
+                pthread_mutex_unlock(&innerUp);
             }
+            pthread_mutex_lock(&update);
+            th_complete++;
+            pthread_cond_signal(&upadateCond);
+            pthread_mutex_unlock(&update);
         }
 
         if(BCAccumulate==1){
@@ -94,8 +101,9 @@ void *t_pool(void *i) {
                     pthread_mutex_unlock(&BCUpdate);
                 }
             }
+            ThreadUpdate();
         }
-        ThreadUpdate();
+
     }
     pthread_exit(nullptr);
 }
@@ -129,9 +137,9 @@ void Forward(int cv){
         while (!q.empty()) {
             int currvertex=q.front();
             q.pop_front();
-            S.push(currvertex);
+            S.push_back(currvertex);
             th[th_count%(NUM_THREADS)].push_back(currvertex);
-            cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
+            //cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
             cv++;
         }
@@ -149,16 +157,23 @@ void BackPropagation(int SV){
     while(true) {
         int itr =0;
         th_complete=0;
-        th_count=0;
-        for (auto j: parent[SV]) {
-            th[th_count % (NUM_THREADS)].push_back(j);
+        auto j = parent[SV].begin();
+        cout<< "\nStack vertex: "<< SV;
+        while(j!=parent[SV].end()){
+            th[th_count % (NUM_THREADS)].push_back(*j);
+            //cout<< "\nPushed in thread Queue: "<< *j;
             th_count++;
             itr++;
+            j++;
         }
         th_count = th_count % (NUM_THREADS);
         wakeSignal();
-        while (th_complete != (NUM_THREADS));
-        if (itr != parent[StackV].size()-1 || parent[StackV].empty()) {
+        pthread_mutex_lock(&update);
+        while (th_complete != (NUM_THREADS)){
+            pthread_cond_wait(&upadateCond,&update);
+        }
+        pthread_mutex_unlock(&update);
+        if (itr != parent[StackV].size()-1 ||S.empty() || parent[StackV].empty()) {
             break;
         }
     }
@@ -195,18 +210,20 @@ void BetweennessCentrality(int s){
     Forward(cv);
     FrontPhase=0;
     BackPhase=1;
-    th_count=0;
-    while(!S.empty()){
-        StackV = S.top();
-        S.pop();
-        BackPropagation(StackV);
+    while (!S.empty()) {
+            th_count=0;
+            StackV = S.back();
+            S.pop_back();
+            BackPropagation(StackV);
     }
+
     BackPhase=0;
     BCAccumulate=1;
     BwcAccumulate(n);
     BCAccumulate=0;
     //ShortPath(s);
     delta.clear();
+    S.clear();
     FrontPhase=1;
 }
 // ============== PRINT CSR =============== //
@@ -231,7 +248,7 @@ void PrintCSR(){
 
 // ============== PRINT BWC =============== //
 void PrintBWC(){
-    cout<< " \n\nprint Betweenness Centrality==>";
+    cout<< " \n=========\nprint Betweenness Centrality==>";
     for(int i=0; i<csr->v_count;i++){
         cout << " \nvertex: " << i<<" ==> " << BC[i]/2;
     }
@@ -252,6 +269,7 @@ void Initialize(){
     pthread_mutex_init(&innerUp, nullptr);
     pthread_mutex_init(&BCUpdate, nullptr);
     pthread_cond_init(&cond, nullptr);
+    pthread_cond_init(&upadateCond, nullptr);
 }
 
 int main () {
@@ -285,7 +303,7 @@ int main () {
         pthread_join(i,nullptr);
     }
     for(auto & i : p){
-        pthread_kill(i,NUM_THREADS);
+        pthread_cancel(i);
     }
 
     clock_gettime(CLOCK_REALTIME, &finish);
@@ -306,6 +324,7 @@ int main () {
     pthread_mutex_destroy(&innerUp);
     pthread_mutex_destroy(&BCUpdate);
     pthread_cond_destroy(&cond);
+    pthread_cond_destroy(&upadateCond);
     return 0;
 }
 
