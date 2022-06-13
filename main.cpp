@@ -7,7 +7,7 @@
 #include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS 8
+#define NUM_THREADS 4
 
 using namespace std;
 using namespace tq;
@@ -26,6 +26,9 @@ float *BC;
 list<int> *parent;
 struct timespec start, finish;
 double elapsed;
+float gbc;
+int *group;
+int group_size;
 
 void wakeSignal(){
     pthread_mutex_lock(&mux);
@@ -71,7 +74,7 @@ void *t_pool(void *i) {
                         parent[w].emplace_back(ver);
                     }
                 }
-                delta[ver]=1/(float)sigma[ver];
+                //delta[ver]=1/(float)sigma[ver];
             }
             ThreadUpdate();
         }
@@ -83,11 +86,18 @@ void *t_pool(void *i) {
                 auto j = parent[SV].begin();
                 cout<< "\nStack vertex: "<< SV;
                 while(j!=parent[SV].end()){
+                    float I = delta[SV];
+                    if(group[SV]==1){I=0;}
                     pthread_mutex_lock(&innerUp);
-                    delta[*j] += delta[SV];
+                    delta[*j] += (((float)sigma[*j]/(float)sigma[SV])*(1+I));
                     //cout << " \nFOR Vertex" << SV << "delta = " << delta[*j];
-                    j++;
+                    ++j;
                     pthread_mutex_unlock(&innerUp);
+                }
+                if(group[SV]==1 & SV != Start){
+                    pthread_mutex_lock(&BCUpdate);
+                    gbc += delta[SV];
+                    pthread_mutex_unlock(&BCUpdate);
                 }
             }
             pthread_mutex_lock(&update);
@@ -96,7 +106,7 @@ void *t_pool(void *i) {
             pthread_mutex_unlock(&update);
         }
 
-        if(BCAccumulate==1){
+        /*if(BCAccumulate==1){
             while (!th[id].empty()) {
                 int v = th[id].front();
                 th[id].pop_front();
@@ -107,14 +117,14 @@ void *t_pool(void *i) {
                 }
             }
             ThreadUpdate();
-        }
+        }*/
 
     }
     pthread_exit(nullptr);
 }
 
 // ======== BetweennessCentrality Accumulation ========= //
-void BwcAccumulate(int n){
+/*void BwcAccumulate(int n){
 
     while(true) {
         th_count=0;
@@ -132,7 +142,7 @@ void BwcAccumulate(int n){
             break;
         }
     }
-}
+}*/
 
 // ========= Forward Phase =========== //
 void Forward(int cv){
@@ -158,7 +168,7 @@ void Forward(int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(int s){
+void BackPropagation(){
     th_count=0;
     while(true) {
         //int itr =0;
@@ -170,7 +180,6 @@ void BackPropagation(int s){
             th[th_count % (NUM_THREADS)].push_back(StackV);
             //cout<< "\nPushed in thread Queue: "<< *j;
             th_count++;
-
         }
         th_count = th_count % (NUM_THREADS);
         wakeSignal();
@@ -214,11 +223,11 @@ void BetweennessCentrality(int s){
     Forward(cv);
     FrontPhase=0;
     BackPhase=1;
-    BackPropagation(s);
+    BackPropagation();
     BackPhase=0;
-    BCAccumulate=1;
-    BwcAccumulate(n);
-    BCAccumulate=0;
+    //BCAccumulate=1;
+    //BwcAccumulate(n);
+    //BCAccumulate=0;
     //ShortPath(s);
     delta.clear();
     S.clear();
@@ -257,11 +266,21 @@ void Initialize(){
     int n = csr->v_count;
     visited = (int *) calloc(n,sizeof (int));
     sigma = (int *) calloc(n, sizeof (int));
-    //delta = (float *) calloc(n, sizeof(float));
-    BC = (float *) calloc(n, sizeof(float));
-    for(int i=0;i<n;i++){ BC[i]=0;}
+    group = (int *)calloc(csr->v_count, sizeof(int));
+    cout << "Enter the length of the group: ";
+    cin >> group_size;
+    gbc = 0;
+    int temp;
+    cout << "Enter vertices for the group: " << endl;
+    for (int i = 0; i < group_size; i++)
+    {
+        cin >> temp;
+        group[temp] = 1;
+    }
+    //BC = (float *) calloc(n, sizeof(float));
+    //for(int i=0;i<n;i++){ BC[i]=0;}
     th = new list<int>[NUM_THREADS];
-    //th1 = new list<int>[NUM_THREADS];
+
     pthread_mutex_init(&mux, nullptr);
     pthread_mutex_init(&update, nullptr);
     pthread_mutex_init(&innerUp, nullptr);
@@ -309,12 +328,17 @@ int main () {
     elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
     printf("\nPthread implementation time: %f\n", elapsed);
 
-    PrintBWC();
+    //PrintBWC();
+    printf("\n-------Group Betweeness centrality-------\n");
+
+    gbc = gbc / 2;
+    printf("GBC: %f \n", gbc);
 
     free(visited);
     delta.clear();
     free(sigma);
-    free(BC);
+    //free(BC);
+    free(group);
     parent->clear();
     th->clear();
     pthread_mutex_destroy(&mux);
