@@ -78,12 +78,17 @@ void *t_pool(void *i) {
 
         if(BackPhase==1){
             while (!th[id].empty()) {
-               int w = th[id].front();
+               int SV = th[id].front();
                th[id].pop_front();
-                pthread_mutex_lock(&innerUp);
-                 delta[w] += delta[StackV];
-                //cout << " \nFOR Vertex" << w << "delta = " << delta[w];
-                pthread_mutex_unlock(&innerUp);
+                auto j = parent[SV].begin();
+                cout<< "\nStack vertex: "<< SV;
+                while(j!=parent[SV].end()){
+                    pthread_mutex_lock(&innerUp);
+                    delta[*j] += delta[SV];
+                    //cout << " \nFOR Vertex" << SV << "delta = " << delta[*j];
+                    j++;
+                    pthread_mutex_unlock(&innerUp);
+                }
             }
             pthread_mutex_lock(&update);
             th_complete++;
@@ -153,18 +158,19 @@ void Forward(int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(int SV){
+void BackPropagation(int s){
+    th_count=0;
     while(true) {
-        int itr =0;
+        //int itr =0;
         th_complete=0;
-        auto j = parent[SV].begin();
-        cout<< "\nStack vertex: "<< SV;
-        while(j!=parent[SV].end()){
-            th[th_count % (NUM_THREADS)].push_back(*j);
+        while (!S.empty()) {
+            th_count=0;
+            StackV = S.back();
+            S.pop_back();
+            th[th_count % (NUM_THREADS)].push_back(StackV);
             //cout<< "\nPushed in thread Queue: "<< *j;
             th_count++;
-            itr++;
-            j++;
+
         }
         th_count = th_count % (NUM_THREADS);
         wakeSignal();
@@ -173,9 +179,7 @@ void BackPropagation(int SV){
             pthread_cond_wait(&upadateCond,&update);
         }
         pthread_mutex_unlock(&update);
-        if (itr != parent[StackV].size()-1 ||S.empty() || parent[StackV].empty()) {
-            break;
-        }
+        if(S.empty()){ break;}
     }
 }
 
@@ -210,13 +214,7 @@ void BetweennessCentrality(int s){
     Forward(cv);
     FrontPhase=0;
     BackPhase=1;
-    while (!S.empty()) {
-            th_count=0;
-            StackV = S.back();
-            S.pop_back();
-            BackPropagation(StackV);
-    }
-
+    BackPropagation(s);
     BackPhase=0;
     BCAccumulate=1;
     BwcAccumulate(n);
