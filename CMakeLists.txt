@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_executable(Final_year_Project main.cpp)
 
-add_executable(CSR CSR.cpp )
-
-add_executable(GraphCreation GraphCreation.c)
-
 add_executable(main1 main1.cpp)
+
+add_executable(GBC GBC.cpp)
