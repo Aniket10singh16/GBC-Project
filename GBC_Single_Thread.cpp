@@ -2,20 +2,31 @@
 #include <cstdlib>
 #include <cstdio>
 #include <queue>
-#include <stack>
+#include <vector>
 #include <list>
-#include "createCSR.cpp"
+#include "CSR.cpp"
 using namespace std;
 
 float gbc;
 int *group;
 int group_size;
+queue<int> q;
+vector<int> S;
+vector<float> back;
+list<int> *parent;
 
 int main()
 {
-    Graph *csr = createCSR();
-    cout << "No of vertices: " << csr->v_count << endl;
-    cout << "No of Edges: " << csr->e_count << endl;
+    csr = (Graph *) malloc(sizeof(Graph));
+    if (csr == nullptr) {
+        printf("\nDynamic memory allocation failed.\n");
+        exit(0);
+    }
+    readCSR();
+    int *nos = (int *)calloc(csr->v_count, sizeof(int));
+    int *level = (int *)calloc(csr->v_count, sizeof(int));
+    //cout << "No of vertices: " << csr->v_count << endl;
+    //cout << "No of Edges: " << csr->e_count << endl;
 
     cout << "Enter the length of the group: ";
     cin >> group_size;
@@ -41,45 +52,46 @@ int main()
 
         int w, top;
         int n = csr->v_count;
-        int *level = (int *)calloc(n, sizeof(int));
-        list<int> parent[n];
-        int *nos = (int *)calloc(n, sizeof(int)); // to calc no of total shortest path from root
-        float *back = (float *)calloc(n, sizeof(float));
-        queue<int> queue;
-        stack<int> stack;
+
+        parent = new list<int>[n];
+         // to calc no of total shortest path from root
+
+        back.assign(n,0);
+
         int start, end, j;
 
         for (int i = 0; i < n; i++)
         {
             level[i] = -1;
+            nos[i]=0;
         }
 
         level[s] = 0;
         nos[s] = 1;
-        queue.push(s);
+        q.push(s);
 
-        while (!queue.empty())
+        while (!q.empty())
         {
-            w = queue.front();
-            queue.pop();
-            stack.push(w);
-            start = csr->list_v[w];
+            w = q.front();
+            q.pop();
+            S.push_back(w);
+            start = csr->vptr[w];
             if (w == (n - 1))
             {
-                end = csr->e_count;
+                end = 2*csr->e_count;
             }
             else
             {
-                end = csr->list_v[w + 1];
+                end = csr->vptr[w + 1];
             }
 
             for (int i = start; i < end; i++)
             {
-                j = csr->list_e[i];
+                j = csr->eptr[i];
                 if (level[j] == -1)
                 {
                     level[j] = level[w] + 1;
-                    queue.push(j);
+                    q.push(j);
                 }
                 if ((level[j] - 1) == (level[w]))
                 {
@@ -89,23 +101,23 @@ int main()
             }
         }
 
-        while (!stack.empty())
+        while (!S.empty())
         {
-            top = stack.top();
-            stack.pop();
+            top = S.back();
+            S.pop_back();
 
             for (auto v : parent[top])
             {
-                int temp = back[top];
+                float I = back[top];
                 if (group[top] == 1)
                 {
-                    temp = 0;
+                    I = 0;
                 }
-                back[v] = back[v] + (((float)nos[v] / (float)nos[top]) * (1 + temp));
+                back[v] += (((float)nos[v] / (float)nos[top]) * (1 + I));
             }
             if (group[top] == 1 && top != s)
             {
-                gbc = gbc + back[top];
+                gbc += back[top];
             }
         }
 
@@ -116,11 +128,8 @@ int main()
         //         bwc[v] = bwc[v] + back[v];
         //     }
         // }
-
-        free(level);
-        free(nos);
-        free(back);
-        parent->clear();
+        S.clear();
+        back.clear();
     }
 
     printf("\n-------Group Betweeness centrality-------\n");
@@ -128,5 +137,9 @@ int main()
     gbc = gbc / 2;
     printf("GBC: %f\n", gbc);
     free(group);
+    free(level);
+    free(nos);
+    back.clear();
+    parent->clear();
     return 0;
 }
