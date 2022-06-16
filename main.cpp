@@ -4,10 +4,11 @@
 #include <list>
 #include <pthread.h>
 #include <semaphore.h>
+#include <unistd.h>
 #include <vector>
 #include "concurrent_queue.hpp"
 
-#define NUM_THREADS 4
+#define NUM_THREADS 8
 
 using namespace std;
 using namespace tq;
@@ -74,7 +75,6 @@ void *t_pool(void *i) {
                         parent[w].emplace_back(ver);
                     }
                 }
-                //delta[ver]=1/(float)sigma[ver];
             }
             ThreadUpdate();
         }
@@ -84,7 +84,7 @@ void *t_pool(void *i) {
                int SV = th[id].front();
                th[id].pop_front();
                 auto j = parent[SV].begin();
-                cout<< "\nStack vertex: "<< SV;
+               // cout<< "\nStack vertex: "<< SV;
                 while(j!=parent[SV].end()){
                     float I = delta[SV];
                     if(group[SV]==1){I=0;}
@@ -105,56 +105,21 @@ void *t_pool(void *i) {
             pthread_cond_signal(&upadateCond);
             pthread_mutex_unlock(&update);
         }
-
-        /*if(BCAccumulate==1){
-            while (!th[id].empty()) {
-                int v = th[id].front();
-                th[id].pop_front();
-                if(v!=Start){
-                    pthread_mutex_lock(&BCUpdate);
-                    BC[v] += (delta[v] * (float) sigma[v] - 1);
-                    pthread_mutex_unlock(&BCUpdate);
-                }
-            }
-            ThreadUpdate();
-        }*/
-
     }
     pthread_exit(nullptr);
 }
 
-// ======== BetweennessCentrality Accumulation ========= //
-/*void BwcAccumulate(int n){
-
-    while(true) {
-        th_count=0;
-        th_complete=0;
-        int v=0;
-        while(v<n){
-            th[th_count % (NUM_THREADS)].push_back(v);
-            th_count++;
-            v++;
-        }
-        th_count = th_count % (NUM_THREADS);
-        wakeSignal();
-        while (th_complete != (NUM_THREADS));
-        if (v >= n) {
-            break;
-        }
-    }
-}*/
-
 // ========= Forward Phase =========== //
 void Forward(int cv){
-    cout << "\nstarting vertex : "<<Start<<" pushed into queue"<<"\n==================================================="<<endl;
+    //cout << "\nstarting vertex : "<<Start<<" pushed into queue"<<"\n==================================================="<<endl;
     while(true){
         th_complete=0;
         while (!q.empty()) {
             int currvertex=q.front();
+            //cout<< "\nCurrent  vertex: "<< currvertex;
             q.pop_front();
             S.push_back(currvertex);
             th[th_count%(NUM_THREADS)].push_back(currvertex);
-            //cout << "Visited[" << cv << "] : -> "<< currvertex << " \n";
             th_count++;
             cv++;
         }
@@ -169,16 +134,13 @@ void Forward(int cv){
 
 // ========= Backward Phase =========== //
 void BackPropagation(){
-    th_count=0;
     while(true) {
-        //int itr =0;
         th_complete=0;
         while (!S.empty()) {
-            th_count=0;
+            //th_count=0;
             StackV = S.back();
             S.pop_back();
             th[th_count % (NUM_THREADS)].push_back(StackV);
-            //cout<< "\nPushed in thread Queue: "<< *j;
             th_count++;
         }
         th_count = th_count % (NUM_THREADS);
@@ -205,6 +167,7 @@ void ShortPath(int s){
 
 // ============ BetweennessCentrality CODE ============= //
 void BetweennessCentrality(int s){
+    cout<< "\nStart vertex ["<<s<<"]: ";
     q.clear();
     Start = s;
     int cv =0;
@@ -222,43 +185,13 @@ void BetweennessCentrality(int s){
     q.push_back(s);
     Forward(cv);
     FrontPhase=0;
+    th_count=0;
     BackPhase=1;
     BackPropagation();
     BackPhase=0;
-    //BCAccumulate=1;
-    //BwcAccumulate(n);
-    //BCAccumulate=0;
-    //ShortPath(s);
     delta.clear();
     S.clear();
     FrontPhase=1;
-}
-// ============== PRINT CSR =============== //
-void PrintCSR(){
-    for (int k = 0; k < csr->v_count; k++) {
-        cout << "[" << k << "] -- " << csr->vptr[k] << " : ";
-
-        if (csr->vptr[k + 1] < 2 * csr->e_count) {
-            for (int l = csr->vptr[k]; l < csr->vptr[k + 1]; l++) {
-                cout << " -> " << csr->eptr[l];
-            }
-        } else {
-            int l = csr->vptr[k];
-            while(l<2*csr->e_count) {
-                cout << " -> " << csr->eptr[l];
-                l++;
-            }
-        }
-        cout << endl;
-    }
-}
-
-// ============== PRINT BWC =============== //
-void PrintBWC(){
-    cout<< " \n=========\nprint Betweenness Centrality==>";
-    for(int i=0; i<csr->v_count;i++){
-        cout << " \nvertex: " << i<<" ==> " << BC[i]/2;
-    }
 }
 
 // ============== INITIALIZE ============== //
@@ -277,8 +210,7 @@ void Initialize(){
         cin >> temp;
         group[temp] = 1;
     }
-    //BC = (float *) calloc(n, sizeof(float));
-    //for(int i=0;i<n;i++){ BC[i]=0;}
+    cout<<"\nCalculating GBC";
     th = new list<int>[NUM_THREADS];
 
     pthread_mutex_init(&mux, nullptr);
@@ -306,7 +238,6 @@ int main () {
         arg[i]=i;
         pthread_create(&p[i], &attr, t_pool, (void *)(arg+i));
     }
-    //PrintCSR();
     clock_gettime(CLOCK_REALTIME, &start);
 
     for(int b=0; b<csr->v_count;b++){
@@ -328,16 +259,19 @@ int main () {
     elapsed += ((double)finish.tv_nsec - (double)start.tv_nsec) / 1000000000.0;
     printf("\nPthread implementation time: %f\n", elapsed);
 
-    //PrintBWC();
-    printf("\n-------Group Betweeness centrality-------\n");
+       cout<< "\n-------Group Betweenness centrality-------\n";
 
     gbc = gbc / 2;
     printf("GBC: %f \n", gbc);
-
+    gbc = gbc/(float)((csr->v_count-group_size)*(csr->v_count-group_size-1));
+    printf("GBC: %f \n", gbc);
+    for(int i=0;i<5;i++){
+        cout<< "\nwait("<<i<<")";
+        sleep(i);
+    }
     free(visited);
     delta.clear();
     free(sigma);
-    //free(BC);
     free(group);
     parent->clear();
     th->clear();
