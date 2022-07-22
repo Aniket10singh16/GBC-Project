@@ -76,7 +76,10 @@ void *t_pool(void *i) {
                     }
                 }
             }
-            ThreadUpdate();
+            pthread_mutex_lock(&update);
+            th_complete++;
+            pthread_cond_signal(&upadateCond);
+            pthread_mutex_unlock(&update);
         }
 
         if(BackPhase==1){
@@ -125,7 +128,11 @@ void Forward(int cv){
         }
         th_count = th_count%(NUM_THREADS);
         wakeSignal();
-        while(th_complete!=(NUM_THREADS));
+        pthread_mutex_lock(&update);
+        while (th_complete != (NUM_THREADS)){
+            pthread_cond_wait(&upadateCond,&update);
+        }
+        pthread_mutex_unlock(&update);
         if(q.empty() ){
             break;
         }
