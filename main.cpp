@@ -84,24 +84,15 @@ void *t_pool(void *i) {
 
         if(BackPhase==1){
             while (!th[id].empty()) {
-               int SV = th[id].front();
+               int w = th[id].front();
                th[id].pop_front();
-                auto j = parent[SV].begin();
-               // cout<< "\nStack vertex: "<< SV;
-                while(j!=parent[SV].end()){
-                    float I = delta[SV];
-                    if(group[SV]==1){I=0;}
-                    pthread_mutex_lock(&innerUp);
-                    delta[*j] += (((float)sigma[*j]/(float)sigma[SV])*(1+I));
-                    //cout << " \nFOR Vertex" << SV << "delta = " << delta[*j];
-                    ++j;
-                    pthread_mutex_unlock(&innerUp);
-                }
-                if(group[SV]==1 & SV != Start){
-                    pthread_mutex_lock(&BCUpdate);
-                    gbc += delta[SV];
-                    pthread_mutex_unlock(&BCUpdate);
-                }
+                pthread_mutex_lock(&innerUp);
+                    float I;
+                    if(group[StackV]==1){I=0;}
+                    else{I = delta[StackV];}
+                    delta[w] += (((float)sigma[w]/(float)sigma[StackV])*(1+I));
+                pthread_mutex_unlock(&innerUp);
+
             }
             pthread_mutex_lock(&update);
             th_complete++;
@@ -140,15 +131,18 @@ void Forward(int cv){
 }
 
 // ========= Backward Phase =========== //
-void BackPropagation(){
+void BackPropagation(int SV){
     while(true) {
+        int itr =0;
         th_complete=0;
-        while (!S.empty()) {
-            //th_count=0;
-            StackV = S.back();
-            S.pop_back();
-            th[th_count % (NUM_THREADS)].push_back(StackV);
+        auto j = parent[SV].begin();
+        //cout<< "\nStack vertex: "<< SV;
+        while(j!=parent[SV].end()){
+            th[th_count % (NUM_THREADS)].push_back(*j);
+            //cout<< "\nPushed in thread Queue: "<< *j;
             th_count++;
+            itr++;
+            j++;
         }
         th_count = th_count % (NUM_THREADS);
         wakeSignal();
@@ -157,7 +151,9 @@ void BackPropagation(){
             pthread_cond_wait(&upadateCond,&update);
         }
         pthread_mutex_unlock(&update);
-        if(S.empty()){ break;}
+        if (itr != parent[StackV].size()-1 ||S.empty() || parent[StackV].empty()) {
+            break;
+        }
     }
 }
 
@@ -194,7 +190,15 @@ void BetweennessCentrality(int s){
     FrontPhase=0;
     th_count=0;
     BackPhase=1;
-    BackPropagation();
+    while (!S.empty()) {
+        th_count=0;
+        StackV = S.back();
+        S.pop_back();
+        BackPropagation(StackV);
+        if(group[StackV]==1 & StackV != Start){
+            gbc += delta[StackV];
+        }
+    }
     BackPhase=0;
     delta.clear();
     S.clear();
