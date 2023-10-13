@@ -1,3 +1,5 @@
+// the main file that runs GBC calculations
+
 #include <pthread.h>
 #include <iostream>
 #include <cstdlib>
