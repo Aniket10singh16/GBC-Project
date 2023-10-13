@@ -16,7 +16,8 @@ The problem of finding a group of vertices of a given size g in a network that h
 In this paper, we propose a Fast-Parallel computation approach to GBC of a given Group in a complex network. The rest of the paper is structured as follows- **Sec II**: we present the definitions and notations that are used in this paper. **Sec III**: we describe the algorithm for parallel processing of GBC. **Sec IV**: performance comparisons. **Sec V**: we show case few applications and **Sec VI**:  conclude the paper. 
 
 # **II. Implementation** 
-![Screenshot 2023-10-13 083515](https://github.com/Aniket10singh16/GBC-Project/assets/37691313/32a0218f-64ac-4bf9-bf13-d14578487bb6)
+
+![Screenshot 2023-10-13 083515](https://github.com/Aniket10singh16/GBC-Project/assets/37691313/becd27d7-c6db-4607-8e98-898f99e39029)
 
 ## **B. Understanding the Algorithm** 
 The algorithm enclosed inside the first loop describes the calculation of Group Betweenness Centrality with respect to just one vertex which may be just a small portion of the whole calculation. In order to calculate the whole GBC, the algorithm needs to run for each and every vertex of the graph. Even though the algorithm proposed by Brandes is a significant improvement over the previous adaptation but still running the algorithm for each and every vertex serially will impose an enormous amount of time to calculate. Thus, to improve this situation, parallel running of the algorithm for each vertex on each thread of the Operating System is necessary and implemented to reduce the computation time significantly.  
