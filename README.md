@@ -13,7 +13,6 @@ Now the calculation of BC of all nodes of a complex network is computationally e
 
 The problem of finding a group of vertices of a given size g in a network that has the highest GBC is in general an NP-hard problem. Brandes and Puzis et al. proposed algorithms to compute the GBC of any given group of vertices. The latter algorithm can compute the GBC of a given group of vertices within reasonable times even for large-scale networks. 
 
-In this paper, we propose a Fast-Parallel computation approach to GBC of a given Group in a complex network. The rest of the paper is structured as follows- **Sec II**: we present the definitions and notations that are used in this paper. **Sec III**: we describe the algorithm for parallel processing of GBC. **Sec IV**: performance comparisons. **Sec V**: we show case few applications and **Sec VI**:  conclude the paper. 
 
 # **II. Implementation** 
 
