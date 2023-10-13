@@ -1,3 +1,6 @@
+
+// This is an experimental version and contains problems regarding multithreading 
+
 #include <iostream>
 #include "CSR.cpp"
 #include <deque>
