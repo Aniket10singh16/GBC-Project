@@ -41,7 +41,7 @@ First, we tested the performance uplift from calculating GBC serially to computi
 
 
 
-|S.no |Name |No of Vertex |No of edges |Serially |Parallelly |
+|S.no |Name |No of Vertex |No of edges |Serial |Parallel |
 | :- | :-: | :- | :- | :-: | :-: |
 |1 |Dolphins.txt |62 |318 |0.0032174s |0.0025614s |
 |2 |Football.txt |115 |1,232 |0.0164311s |0.0169048s |
@@ -81,7 +81,7 @@ First, we tested the performance uplift from calculating GBC serially to computi
 ## **Table 4: How Computational time changes with the number of threads used to calculate GBC** 
 
 
-Note: Execution Time can vastly vary from time to time due to various reasons example, background processes, OS scheduling, memory available, etc. The Time Taken mentioned above are just approximate. 
+Note: Execution Time can vastly vary from time to time due to various reasons, for example, background processes, OS scheduling, memory available, etc. The Time Taken mentioned above are just approximate. 
 
 # **IV. Conclusion** 
 
